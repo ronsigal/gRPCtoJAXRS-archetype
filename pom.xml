@@ -2,14 +2,14 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>dev.resteasy.grpc</groupId>
 	<artifactId>gRPCtoJakartaREST-archetype</artifactId>
-	<version>1.0.0.Alpha5</version>
+	<version>1.0.0.Alpha6-SNAPSHOT</version>
 	<packaging>maven-archetype</packaging>
 	
     <parent>
         <groupId>dev.resteasy.tools</groupId>
         <artifactId>resteasy-parent</artifactId>
-        <version>2.0.3.Final</version>
-        <relativePath/>
+        <version>2.0.4.Final</version>
+        <relativePath />
     </parent>
 
 	<properties>
