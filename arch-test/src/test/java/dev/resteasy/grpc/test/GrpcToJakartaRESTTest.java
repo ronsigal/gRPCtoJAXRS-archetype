@@ -41,8 +41,9 @@ public class GrpcToJakartaRESTTest {
     @Deployment
     static Archive<?> deploy() throws Exception {
         WebArchive war = TestUtil.prepareArchive(GrpcToJakartaRESTTest.class.getSimpleName());
+        String version = System.getProperty("grpc.example.version", "1.0.1.Final-SNAPSHOT");
         war.merge(ShrinkWrap.createFromZipFile(WebArchive.class,
-                TestUtil.resolveDependency("dev.resteasy.examples:grpcToRest.example.grpc:war:1.0.0.Final-SNAPSHOT")));
+                TestUtil.resolveDependency("dev.resteasy.examples:grpcToRest.example.grpc:war:" + version)));
         WebArchive archive = (WebArchive) TestUtil.finishContainerPrepare(war, null, (Class<?>[]) null);
         // log.info(archive.toString(true));
         // archive.as(ZipExporter.class).exportTo(new File("/tmp/GrpcToJaxrs.jar"), true);
@@ -85,7 +86,8 @@ public class GrpcToJakartaRESTTest {
             dev_resteasy_example_grpc_greet___GeneralGreeting greeting = grm
                     .getDevResteasyExampleGrpcGreetGeneralGreetingField();
             Assert.assertEquals("Heyyy", greeting.getSalute());
-            Assert.assertEquals("Bill", greeting.getGreetingSuper().getS());
+            Assert.assertEquals("Bill", greeting.getS());
+
         } catch (StatusRuntimeException e) {
             try (StringWriter writer = new StringWriter()) {
                 e.printStackTrace(new PrintWriter(writer));
