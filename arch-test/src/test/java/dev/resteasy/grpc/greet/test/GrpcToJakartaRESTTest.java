@@ -1,7 +1,10 @@
 package dev.resteasy.grpc.greet.test;
 
+import java.util.Collection;
+
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
+import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.Response;
 
 import org.jboss.arquillian.container.test.api.Deployment;
@@ -16,12 +19,18 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import com.google.protobuf.Any;
+import com.google.protobuf.Message;
+
 import dev.resteasy.example.grpc.greet.GreetServiceGrpc;
 import dev.resteasy.example.grpc.greet.GreetServiceGrpc.GreetServiceBlockingStub;
+import dev.resteasy.example.grpc.greet.Greet_proto;
 import dev.resteasy.example.grpc.greet.Greet_proto.GeneralEntityMessage;
 import dev.resteasy.example.grpc.greet.Greet_proto.GeneralReturnMessage;
 import dev.resteasy.example.grpc.greet.Greet_proto.dev_resteasy_example_grpc_greet___GeneralGreeting;
 import dev.resteasy.example.grpc.greet.Greet_proto.dev_resteasy_example_grpc_greet___Greeting;
+import dev.resteasy.grpc.bridge.runtime.Utility;
+import dev.resteasy.grpc.bridge.runtime.protobuf.JavabufTranslator;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
@@ -32,16 +41,30 @@ public class GrpcToJakartaRESTTest {
 
     private static ManagedChannel channel;
     private static GreetServiceBlockingStub blockingStub;
+    private static JavabufTranslator translator;
+
+    static {
+        Class<?> clazz;
+        try {
+            clazz = Class.forName("dev.resteasy.example.grpc.greet.GreetJavabufTranslator");
+            translator = (JavabufTranslator) clazz.newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     @Deployment
     static Archive<?> deploy() throws Exception {
         WebArchive war = TestUtil.prepareArchive(GrpcToJakartaRESTTest.class.getSimpleName());
-        String version = System.getProperty("grpc.example.version", "1.0.1.Final-SNAPSHOT");
+        String version = System.getProperty("grpc.example.version", "1.0.0.Alpha7-SNAPSHOT");
+        System.out.println("VERSION: " + version);//expected format is <groupId>:<artifactId>[:<extension>[:<classifier>]]:<version>
+        System.out
+                .println(TestUtil.resolveDependency("dev.resteasy.examples:grpcToRest.example.grpc:war:" + version).toString());
         war.merge(ShrinkWrap.createFromZipFile(WebArchive.class,
                 TestUtil.resolveDependency("dev.resteasy.examples:grpcToRest.example.grpc:war:" + version)));
         WebArchive archive = (WebArchive) TestUtil.finishContainerPrepare(war, null, (Class<?>[]) null);
         // log.info(archive.toString(true));
-        // archive.as(ZipExporter.class).exportTo(new File("/tmp/GrpcToJaxrs.jar"), true);
+        // archive.as(ZipExporter.class).exportTo(new File("/tmp/GrpcToJaxrs.war"), true);
         return archive;
     }
 
@@ -52,7 +75,7 @@ public class GrpcToJakartaRESTTest {
         Client client = ClientBuilder.newClient();
         Response response = client.target("http://localhost:8080/GrpcToJakartaRESTTest/grpcToJakartaRest/grpcserver/context")
                 .request().get();
-        Assert.assertEquals(200, response.getStatus());
+        Assert.assertEquals(204, response.getStatus());
         client.close();
     }
 
@@ -81,6 +104,70 @@ public class GrpcToJakartaRESTTest {
             Assert.assertEquals("Bill", greeting.getS());
         } catch (StatusRuntimeException e) {
             //
+        }
+    }
+
+    @Test
+    public void testListStringGeneric() throws Exception {
+        java.util.List<java.lang.String> coll = new java.util.ArrayList<java.lang.String>();
+        coll.add("abc");
+        GenericType<java.util.List<java.lang.String>> type = new GenericType<java.util.List<java.lang.String>>() {
+        };
+        Message m = translator.translateToJavabuf(coll, type);
+        Any any = Any.pack(m);
+        Greet_proto.GeneralEntityMessage.Builder builder = Greet_proto.GeneralEntityMessage.newBuilder();
+        GeneralEntityMessage gem = builder.setAnyField(any).build();
+        GeneralReturnMessage response = blockingStub.listString(gem);
+        any = response.getAnyField();
+        Message result = any.unpack((Class) Utility.extractClassFromAny(any, translator));
+        Assert.assertEquals(coll, translator.translateFromJavabuf(result));
+    }
+
+    @Test
+    public void testHashSetIntegerGenericType() throws Exception {
+        java.util.HashSet<java.lang.Integer> set = new java.util.HashSet<java.lang.Integer>();
+        set.add(Integer.valueOf(17));
+        GenericType<java.util.HashSet<java.lang.Integer>> type = new GenericType<java.util.HashSet<java.lang.Integer>>() {
+        };
+        Message m = translator.translateToJavabuf(set, type);
+        GeneralEntityMessage.Builder builder = GeneralEntityMessage.newBuilder();
+        GeneralEntityMessage gem = builder.setJavaUtilHashSet0Field((Greet_proto.java_util___HashSet0) m).build();
+        GeneralReturnMessage response = blockingStub.hashsetInteger(gem);
+        Message result = response.getJavaUtilHashSet0Field();
+        Object o = translator.translateFromJavabuf(result);
+        System.out.println("O: " + o);
+        Assert.assertTrue(CollectionEquals.equals(set, o));
+    }
+
+    //////////////////////////////////////////////////////////
+    public static class CollectionEquals {
+
+        public static boolean equals(Object o1, Object o2) {
+            if (!o1.getClass().equals(o2.getClass())) {
+                return false;
+            }
+            if (!Collection.class.isAssignableFrom(o1.getClass()) || !Collection.class.isAssignableFrom(o2.getClass())) {
+                return false;
+            }
+            Object[] o1s = ((Collection) o1).toArray();
+            Object[] o2s = ((Collection) o2).toArray();
+            if (o1s.length != o2s.length) {
+                return false;
+            }
+            for (int i = 0; i < o1s.length; i++) {
+                Object o1s1 = o1s[i];
+                Object o2s1 = o2s[i];
+                if (Collection.class.isAssignableFrom(o1s1.getClass()) && Collection.class.isAssignableFrom(o2s1.getClass())) {
+                    return equals(o1s1, o2s1);
+                }
+                if ((o1s1 == null && o2s1 != null) || (o1s1 != null && o2s1 == null)) {
+                    return false;
+                }
+                if (!o1s1.equals(o2s1)) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }
